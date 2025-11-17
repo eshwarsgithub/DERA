@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model de {
+  id               String   @id
+  name             String
+  externalKey      String?  @db.VarChar(255)
+  folderPath       String?  @db.VarChar(512)
+  lastReferencedAt DateTime?
+  isOrphan         Boolean  @default(false)
+  riskScore        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  fields           de_field[]
+  outgoingRels     de_relationship[] @relation("from")
+  incomingRels     de_relationship[] @relation("to")
+}
+
+model de_field {
+  id               String   @id @default(cuid())
+  de               de       @relation(fields: [deId], references: [id])
+  deId             String
+  name             String
+  dataType         FieldDataType
+  isPII            Boolean  @default(false)
+  piiType          PiiType?
+  sensitivityScore Int      @default(0)
+}
+
+model de_relationship {
+  id         String         @id @default(cuid())
+  from       de             @relation("from", fields: [fromDeId], references: [id])
+  fromDeId   String
+  to         de             @relation("to", fields: [toDeId], references: [id])
+  toDeId     String
+  relationType RelationType
+}
+
+model scan_job {
+  id          String   @id @default(cuid())
+  status      JobStatus
+  startedAt   DateTime
+  completedAt DateTime?
+  error       String?
+  stats       Json?
+}
+
+// PRD-aligned tables (can coexist with existing MVP models)
+model metadata_registry {
+  id               String   @id @default(cuid())
+  de_name          String
+  de_key           String
+  bu               String?
+  row_count        Int?
+  last_modified    DateTime?
+  pii_summary      Json?
+  usage_summary    Json?
+  risk_score       Float?
+  risk_level       String?
+  last_referenced  DateTime?
+  retention_policy Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model usage_index {
+  id          String   @id @default(cuid())
+  de_key      String
+  object_type String
+  object_name String
+  snippet     String?
+  direction   String   // inbound | outbound
+  last_seen   DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model transformations {
+  id              String   @id @default(cuid())
+  query_id        String?
+  source_de_keys  Json?
+  target_de_key   String?
+  mapping         Json?
+  sql_text        String?
+  confidence      String?
+  createdAt       DateTime @default(now())
+}
+
+enum FieldDataType {
+  Text
+  Email
+  Phone
+  Number
+  Date
+  Bool
+  Unknown
+}
+
+enum PiiType {
+  Email
+  Phone
+  FirstName
+  LastName
+  Address
+  DOB
+  SSN
+  Other
+}
+
+enum RelationType {
+  Lookup
+  PrimaryKey
+  ForeignKey
+  Join
+  Unknown
+}
+
+enum JobStatus {
+  queued
+  running
+  success
+  failed
+}
