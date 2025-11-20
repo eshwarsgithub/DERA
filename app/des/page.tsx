@@ -55,7 +55,7 @@ export default async function Page({ searchParams }: { searchParams: Record<stri
           </thead>
           <tbody>
             {items.map((it: any) => (
-              <tr key={it.id} className="border-t border-white/10 hover:bg-white/5">
+              <tr key={it.id ?? it.de_key ?? it.name ?? it.de_name} className="border-t border-white/10 hover:bg-white/5">
                 <td className="p-2"><a className="hover:underline" href={`/des/${it.id ?? it.de_key}`}>{it.name ?? it.de_name}</a></td>
                 <td className="p-2">{it.riskScore ?? it.risk_score}</td>
                 <td className="p-2">{(it.isOrphan ?? false) ? 'Yes' : 'No'}</td>
