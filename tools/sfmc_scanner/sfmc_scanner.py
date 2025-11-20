@@ -13,17 +13,16 @@ Configurations via env vars or CLI params. Keep credentials out of source contro
 
 import os
 import sys
-import time
 import json
 import re
 import argparse
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 
 try:
     import requests
     import sqlparse
     from dotenv import load_dotenv
-except Exception as e:
+except Exception:
     print("Missing dependencies. Run: pip install -r requirements.txt")
     raise
 
@@ -63,6 +62,85 @@ def rest_get(path: str, token: str, rest_base: str, params: dict = None) -> Any:
     r = requests.get(url, headers=headers, params=params)
     r.raise_for_status()
     return r.json()
+
+
+def fetch_automations(token: str, rest_base: str) -> List[Dict[str, Any]]:
+    """Fetch automations via REST; return list of automation objects (best-effort)."""
+    try:
+        resp = rest_get('/automation/v1/automations', token, rest_base)
+        if isinstance(resp, dict):
+            return resp.get('items') or resp.get('automations') or []
+        return resp
+    except Exception:
+        return []
+
+
+def fetch_journeys(token: str, rest_base: str) -> List[Dict[str, Any]]:
+    """Fetch Journey Builder interactions (best-effort)."""
+    try:
+        resp = rest_get('/interaction/v1/interactions', token, rest_base)
+        if isinstance(resp, dict):
+            return resp.get('items') or resp.get('interactions') or []
+        return resp
+    except Exception:
+        return []
+
+
+def fetch_cloudpages(token: str, rest_base: str) -> List[Dict[str, Any]]:
+    """Fetch CloudPage assets (assets endpoint) and return published HTML assets.
+    This is a best-effort: it returns assets and their content when available.
+    """
+    out = []
+    try:
+        resp = rest_get('/asset/v1/content/assets', token, rest_base, params={'page': 1, 'pageSize': 50})
+        items = []
+        if isinstance(resp, dict):
+            items = resp.get('items') or resp.get('assets') or []
+        elif isinstance(resp, list):
+            items = resp
+        for it in items:
+            # only include HTML type assets (CloudPages)
+            if it.get('contentType') in ('templatebased', 'htmlemail', 'webpage', 'webpageasset') or it.get('assetType') == 'webpage':
+                out.append(it)
+    except Exception:
+        pass
+    return out
+
+
+def parse_cloudpage_for_des(content: str) -> List[str]:
+    """Scan CloudPage HTML/SSJS/AMPscript for DE references (simple heuristics)."""
+    tokens = set()
+    if not content:
+        return []
+    # AMPscript Lookup, LookupRows, UpsertDE, DataExtension.Init patterns
+    patterns = [r"Lookup\(\s*'([^']+)'", r"LookupRows\(\s*'([^']+)'", r"UpsertData\(\s*'([^']+)'", r"DataExtension\.Init\(\s*'([^']+)'", r"DataExtensionObject\(\s*'([^']+)'"]
+    for p in patterns:
+        for m in re.findall(p, content, flags=re.IGNORECASE):
+            tokens.add(m.strip())
+    # also look for usages in JS that reference /hub/v1/dataevents/key:KEY
+    for m in re.findall(r"/hub/v1/dataevents/key:([\w\-_.]+)", content, flags=re.IGNORECASE):
+        tokens.add(m.strip())
+    return list(tokens)
+
+
+def compute_confidence(evidence: List[str]) -> float:
+    """Simple confidence scoring based on evidence strings.
+    Assign weights: direct SQL/asset id -> high; name match -> medium; cloudpage token -> low.
+    """
+    score = 0.0
+    for e in evidence:
+        le = e.lower()
+        if 'query:' in le or 'sql' in le or 'direct reference' in le:
+            score += 0.6
+        elif 'automation' in le or 'journey' in le or 'entry' in le or 'asset id' in le:
+            score += 0.2
+        elif 'cloudpage' in le or 'ampscript' in le or 'ssjs' in le:
+            score += 0.08
+        elif 'naming' in le or 'token' in le:
+            score += 0.04
+        else:
+            score += 0.02
+    return min(1.0, score)
 
 
 def soap_retrieve(soap_base: str, token: str, object_type: str, properties: List[str], page: int = 1) -> List[Dict[str, Any]]:
@@ -217,7 +295,11 @@ def orchestrate(out_dir: str):
 
     print('Authenticating to SFMC...')
     token_resp = get_oauth_token(SFMC_CLIENT_ID, SFMC_CLIENT_SECRET, SFMC_AUTH_BASE_URL)
-    access_token = token_resp.get('access_token') or token_resp.get('accessToken')
+    # get_oauth_token may return either a token string (cached helper) or a dict
+    if isinstance(token_resp, dict):
+        access_token = token_resp.get('access_token') or token_resp.get('accessToken')
+    else:
+        access_token = token_resp
     if not access_token:
         print('Failed to obtain access token. Response:', token_resp)
         sys.exit(1)
@@ -250,6 +332,13 @@ def orchestrate(out_dir: str):
 
     print(f'Found {len(des)} DEs and {len(queries)} queries (best-effort).')
 
+    # Fetch automations, journeys, and cloudpages
+    print('Fetching Automations, Journeys, and CloudPages (REST)...')
+    automations = fetch_automations(access_token, SFMC_REST_BASE_URL)
+    journeys = fetch_journeys(access_token, SFMC_REST_BASE_URL)
+    cloudpages = fetch_cloudpages(access_token, SFMC_REST_BASE_URL)
+
+    print(f'Found {len(automations)} automations, {len(journeys)} journeys, {len(cloudpages)} cloudpages (best-effort).')
     # For each DE, try to fetch fields (SOAP DataExtensionField)
     print('Fetching DE fields (SOAP, per-DE, up to limits)...')
     for de in des:
@@ -266,6 +355,58 @@ def orchestrate(out_dir: str):
             de['fields'] = []
 
     graph = build_graph(des, queries)
+
+    # Enrich graph with automations, journeys, and cloudpages
+    for a in automations:
+        aid = a.get('id') or a.get('automationId') or a.get('objectId')
+        anode = {'id': f"automation::{aid}", 'type': 'Automation', 'name': a.get('name') or a.get('Name')}
+        graph['nodes'].append(anode)
+        # inspect activities in automation if available
+        acts = a.get('activities') or a.get('activity') or []
+        for act in acts:
+            # if activity references a query or DE
+            label = act.get('activityType') or act.get('type') or ''
+            # look for target DE in payload
+            target = None
+            if isinstance(act, dict):
+                target = act.get('arguments', {}).get('to') or act.get('configuration', {}).get('destination') or act.get('dataExtensionCustomerKey')
+            if target:
+                ev = [f"Automation:{aid} activity:{label}"]
+                conf = compute_confidence(ev)
+                graph['edges'].append({'from': anode['id'], 'to': f"de::{target}", 'relationship': 'writes_to', 'evidence': ev, 'confidence': conf})
+
+    for j in journeys:
+        jid = j.get('id') or j.get('interactionKey') or j.get('definitionId')
+        jnode = {'id': f"journey::{jid}", 'type': 'Journey', 'name': j.get('name') or j.get('displayName')}
+        graph['nodes'].append(jnode)
+        # try to find entry sources referencing DE
+        entry = j.get('entryEvent') or j.get('entrySource') or j.get('entry')
+        if isinstance(entry, dict):
+            de_ref = entry.get('dataExtensionId') or entry.get('dataExtensionKey') or entry.get('customerKey')
+            if de_ref:
+                ev = [f"Journey:{jid} entry"]
+                conf = compute_confidence(ev)
+                graph['edges'].append({'from': f"de::{de_ref}", 'to': jnode['id'], 'relationship': 'used_by', 'evidence': ev, 'confidence': conf})
+
+    for cp in cloudpages:
+        cid = cp.get('id') or cp.get('assetId') or cp.get('id')
+        cpnode = {'id': f"cloudpage::{cid}", 'type': 'CloudPage', 'name': cp.get('name') or cp.get('displayName')}
+        graph['nodes'].append(cpnode)
+        # try to fetch content if available (asset content endpoint)
+        content = ''
+        try:
+            asset_id = cp.get('id') or cp.get('assetId')
+            if asset_id:
+                aresp = rest_get(f'/asset/v1/content/assets/{asset_id}', access_token, SFMC_REST_BASE_URL)
+                # asset content may be nested; try some fields
+                content = aresp.get('content') or aresp.get('html') or json.dumps(aresp)
+        except Exception:
+            content = ''
+        tokens = parse_cloudpage_for_des(content)
+        for t in tokens:
+            ev = [f"CloudPage:{cid} token:{t}"]
+            conf = compute_confidence(ev)
+            graph['edges'].append({'from': cpnode['id'], 'to': f"de::{t}", 'relationship': 'references', 'evidence': ev, 'confidence': conf})
 
     out_json = os.path.join(out_dir, 'graph.json')
     with open(out_json, 'w', encoding='utf-8') as fh:
