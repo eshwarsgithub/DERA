@@ -8,3 +8,4 @@ coverage
 .vercel
 /.turbo
 /prisma/*.db
+.DS_Store
