@@ -23,8 +23,6 @@ export async function startScan() {
         piiType: string | null;
         sensitivityScore: number;
       }>;
-      isOrphan: boolean;
-      riskScore: number;
     }> = [];
 
     for (const de of des) {
@@ -40,8 +38,6 @@ export async function startScan() {
           piiType: (r.piiType as string) ?? null,
           sensitivityScore: r.sensitivityScore,
         })),
-        isOrphan: true, // Will be updated after upsert when we have lastReferencedAt
-        riskScore: computeRisk(fieldResults.map((x) => x.r), true),
       });
     }
 

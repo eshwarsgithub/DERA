@@ -247,7 +247,7 @@ const XML_ENTITIES: Record<string, string> = {
 };
 
 function decodeXml(str: string): string {
-  return str.replace(XML_ENTITY_RX, (_, entity: string) => XML_ENTITIES[entity] || _);
+  return str.replace(XML_ENTITY_RX, (match, entity: string) => XML_ENTITIES[entity] ?? match);
 }
 
 type SoapRetrieveOpts = { objectType: string; properties: string[]; continueRequestId?: string; filterXml?: string };
