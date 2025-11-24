@@ -29,6 +29,9 @@ const patterns: Array<{ rx: RegExp; type: PiiType; score: number }> = [
   { rx: /ssn|sin/i, type: 'SSN', score: 90 },
 ];
 
+// Pre-compile regex for dataType check to avoid re-creation on each call
+const EMAIL_DATATYPE_RX = /email/i;
+
 export function scanField(field: FieldDescriptor): PiiResult {
   const name = field.name || '';
   for (const p of patterns) {
@@ -36,6 +39,6 @@ export function scanField(field: FieldDescriptor): PiiResult {
       return { isPII: true, piiType: p.type, sensitivityScore: p.score };
     }
   }
-  if (/(email)/i.test(field.dataType ?? '')) return { isPII: true, piiType: 'Email', sensitivityScore: 50 };
+  if (EMAIL_DATATYPE_RX.test(field.dataType ?? '')) return { isPII: true, piiType: 'Email', sensitivityScore: 50 };
   return { isPII: false, sensitivityScore: 0 };
 }

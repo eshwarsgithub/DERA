@@ -11,31 +11,77 @@ export async function startScan() {
   // Run in-line (MVP); in future, offload to background worker
   try {
     const des = await fetchDataExtensions();
+    
+    // Process all DEs and prepare batch data
+    const deDataList: Array<{
+      id: string;
+      name: string;
+      fieldData: Array<{
+        name: string;
+        dataType: string;
+        isPII: boolean;
+        piiType: string | null;
+        sensitivityScore: number;
+      }>;
+    }> = [];
+
     for (const de of des) {
-      // upsert de
-      const dbDe = await prisma.de.upsert({
-        where: { id: de.id },
-        update: { name: de.name },
-        create: { id: de.id, name: de.name, riskScore: 0, isOrphan: false },
-      });
-      // fields
       const fieldResults = de.fields.map((f) => ({ f, r: scanField({ name: f.name, dataType: f.dataType }) }));
-      // replace fields for simplicity
-      await prisma.de_field.deleteMany({ where: { deId: dbDe.id } });
-      await prisma.de_field.createMany({
-        data: fieldResults.map(({ f, r }) => ({
-          deId: dbDe.id,
+      
+      deDataList.push({
+        id: de.id,
+        name: de.name,
+        fieldData: fieldResults.map(({ f, r }) => ({
           name: f.name,
-          dataType: (f.dataType ?? 'Unknown') as any,
+          dataType: (f.dataType ?? 'Unknown'),
           isPII: r.isPII,
-          piiType: (r.piiType as any) ?? null,
+          piiType: (r.piiType as string) ?? null,
           sensitivityScore: r.sensitivityScore,
         })),
       });
-      const isOrphan = inferIsOrphan(dbDe.lastReferencedAt);
-      const risk = computeRisk(fieldResults.map((x) => x.r), isOrphan);
-      await prisma.de.update({ where: { id: dbDe.id }, data: { isOrphan, riskScore: risk } });
     }
+
+    // Use transaction for batch operations to reduce round-trips
+    await prisma.$transaction(async (tx) => {
+      for (const deData of deDataList) {
+        // Upsert DE
+        const dbDe = await tx.de.upsert({
+          where: { id: deData.id },
+          update: { name: deData.name },
+          create: { id: deData.id, name: deData.name, riskScore: 0, isOrphan: false },
+        });
+
+        // Delete existing fields and create new ones
+        await tx.de_field.deleteMany({ where: { deId: dbDe.id } });
+        
+        if (deData.fieldData.length > 0) {
+          await tx.de_field.createMany({
+            data: deData.fieldData.map((fd) => ({
+              deId: dbDe.id,
+              name: fd.name,
+              dataType: fd.dataType as any,
+              isPII: fd.isPII,
+              piiType: fd.piiType as any,
+              sensitivityScore: fd.sensitivityScore,
+            })),
+          });
+        }
+
+        // Recalculate risk with actual lastReferencedAt from DB
+        const isOrphan = inferIsOrphan(dbDe.lastReferencedAt);
+        const risk = computeRisk(
+          deData.fieldData.map((fd) => ({
+            isPII: fd.isPII,
+            piiType: fd.piiType as any,
+            sensitivityScore: fd.sensitivityScore,
+          })),
+          isOrphan
+        );
+        
+        await tx.de.update({ where: { id: dbDe.id }, data: { isOrphan, riskScore: risk } });
+      }
+    });
+
     await prisma.scan_job.update({ where: { id: job.id }, data: { status: 'success', completedAt: new Date() } });
   } catch (e: any) {
     await prisma.scan_job.update({ where: { id: job.id }, data: { status: 'failed', completedAt: new Date(), error: String(e?.message ?? e) } });

@@ -236,13 +236,18 @@ function extractTag(text: string, tag: string): string[] {
   return out;
 }
 
+// Pre-compiled regex and entity map for efficient XML decoding
+const XML_ENTITY_RX = /&(amp|lt|gt|quot|apos);/g;
+const XML_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+};
+
 function decodeXml(str: string): string {
-  return str
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
+  return str.replace(XML_ENTITY_RX, (match, entity: string) => XML_ENTITIES[entity] ?? match);
 }
 
 type SoapRetrieveOpts = { objectType: string; properties: string[]; continueRequestId?: string; filterXml?: string };

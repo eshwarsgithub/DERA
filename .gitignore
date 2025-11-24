@@ -9,3 +9,4 @@ coverage
 /.turbo
 /prisma/*.db
 .DS_Store
+tsconfig.tsbuildinfo

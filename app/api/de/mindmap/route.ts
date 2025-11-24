@@ -93,22 +93,29 @@ export async function GET(req: Request) {
       }
     });
 
-    for (const p of pages as any[]) {
-      const nameL = (p.name || '').toLowerCase();
-      let matched = nameL && Array.from(deNames).some((n) => n && nameL.includes(n));
-      // Try to fetch and parse AMPscript content if possible
-      if (!matched && p.id) {
-        const asset = await fetchAssetContentById(String(p.id));
-        const html = String(asset?.content || asset?.views?.html || '');
-        const ampRef = extractAmpScriptDeNames(html);
-        if (ampRef.some((r) => deNames.has(r.toLowerCase()))) {
-          matched = true;
+    // Process CloudPages in parallel for better performance
+    const pageResults = await Promise.all(
+      (pages as any[]).map(async (p) => {
+        const nameL = (p.name || '').toLowerCase();
+        let matched = nameL && Array.from(deNames).some((n) => n && nameL.includes(n));
+        // Try to fetch and parse AMPscript content if possible
+        if (!matched && p.id) {
+          const asset = await fetchAssetContentById(String(p.id));
+          const html = String(asset?.content || asset?.views?.html || '');
+          const ampRef = extractAmpScriptDeNames(html);
+          if (ampRef.some((r) => deNames.has(r.toLowerCase()))) {
+            matched = true;
+          }
         }
-      }
+        return { page: p, matched };
+      })
+    );
+    
+    pageResults.forEach(({ page, matched }) => {
       if (matched) {
-        outbounds.push({ type: 'CloudPage', name: p.name, confidence: 'medium' });
+        outbounds.push({ type: 'CloudPage', name: page.name, confidence: 'medium' });
       }
-    }
+    });
 
     (exportsList as any[]).forEach((ex) => {
       if ((ex.name || '').toLowerCase().includes(de.name.toLowerCase())) {
@@ -157,11 +164,15 @@ export async function GET(req: Request) {
   }
 }
 
+// Pre-compiled regex for AMPscript DE name extraction
+const AMPSCRIPT_DE_RX = /\b(Lookup|LookupRows|InsertDE|UpdateDE|DeleteDE|UpsertDE)\s*\(\s*['"]([^'"]+)['"]/gi;
+
 function extractAmpScriptDeNames(html: string): string[] {
   const names = new Set<string>();
-  const rx = /\b(Lookup|LookupRows|InsertDE|UpdateDE|DeleteDE|UpsertDE)\s*\(\s*['"]([^'"]+)['"]/gi;
+  // Reset lastIndex since we're reusing a global regex
+  AMPSCRIPT_DE_RX.lastIndex = 0;
   let m: RegExpExecArray | null;
-  while ((m = rx.exec(html))) {
+  while ((m = AMPSCRIPT_DE_RX.exec(html))) {
     names.add(m[2]);
   }
   return Array.from(names);
