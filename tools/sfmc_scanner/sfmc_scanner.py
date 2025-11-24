@@ -60,8 +60,15 @@ def rest_get(path: str, token: str, rest_base: str, params: dict = None) -> Any:
     url = rest_base.rstrip('/') + '/' + path.lstrip('/')
     headers = {'Authorization': f'Bearer {token}'}
     r = requests.get(url, headers=headers, params=params)
-    r.raise_for_status()
-    return r.json()
+    try:
+        r.raise_for_status()
+    except Exception:
+        # return raw for debugging
+        return {'_http_error': True, 'status_code': r.status_code, 'text': r.text}
+    try:
+        return r.json()
+    except Exception:
+        return {'_raw': r.text}
 
 
 def fetch_automations(token: str, rest_base: str) -> List[Dict[str, Any]]:
@@ -143,7 +150,7 @@ def compute_confidence(evidence: List[str]) -> float:
     return min(1.0, score)
 
 
-def soap_retrieve(soap_base: str, token: str, object_type: str, properties: List[str], page: int = 1) -> List[Dict[str, Any]]:
+def soap_retrieve(soap_base: str, token: str, object_type: str, properties: List[str], page: int = 1, verbose: bool = False) -> List[Dict[str, Any]]:
     """Perform a simple SOAP Retrieve for an object type. This is a minimal implementation and may need extension for large accounts.
     """
     soap_url = soap_base.rstrip('/') + '/Service.asmx'
@@ -166,7 +173,18 @@ def soap_retrieve(soap_base: str, token: str, object_type: str, properties: List
 </s:Envelope>'''
     headers = {'Content-Type': 'text/xml'}
     r = requests.post(soap_url, data=envelope.encode('utf-8'), headers=headers, timeout=30)
-    r.raise_for_status()
+    if verbose:
+        # dump raw soap for inspection
+        try:
+            with open('soap_last_response.xml', 'w', encoding='utf-8') as fh:
+                fh.write(r.text)
+        except Exception:
+            pass
+    try:
+        r.raise_for_status()
+    except Exception:
+        # surface raw response for debugging
+        return [{'__soap_error': True, 'status_code': r.status_code, 'text': r.text}]
     # Very small XML parse to extract results; a full parser for partnerAPI is out of scope here
     # We'll attempt a naive approach: look for <Results> blocks and key/value pairs within
     import xml.etree.ElementTree as ET
@@ -292,6 +310,7 @@ def build_graph(known_des: List[Dict[str, Any]], queries: List[Dict[str, Any]]) 
 
 def orchestrate(out_dir: str):
     os.makedirs(out_dir, exist_ok=True)
+    verbose = bool(globals().get('VERBOSE_FLAG', False))
 
     print('Authenticating to SFMC...')
     token_resp = get_oauth_token(SFMC_CLIENT_ID, SFMC_CLIENT_SECRET, SFMC_AUTH_BASE_URL)
@@ -306,7 +325,7 @@ def orchestrate(out_dir: str):
 
     print('Fetching Data Extensions (SOAP)...')
     try:
-        des = soap_retrieve(SFMC_SOAP_BASE_URL, access_token, 'DataExtension', ['CustomerKey', 'Name'])
+        des = soap_retrieve(SFMC_SOAP_BASE_URL, access_token, 'DataExtension', ['CustomerKey', 'Name'], verbose=verbose)
     except Exception as e:
         print('SOAP DataExtension retrieve failed:', e)
         des = []
@@ -325,7 +344,7 @@ def orchestrate(out_dir: str):
         print('REST queries fetch failed, trying SOAP fallback. Error:', e)
         # SOAP fallback for QueryDefinition
         try:
-            queries = soap_retrieve(SFMC_SOAP_BASE_URL, access_token, 'QueryDefinition', ['ObjectID', 'CustomerKey', 'Name', 'QueryText'])
+                queries = soap_retrieve(SFMC_SOAP_BASE_URL, access_token, 'QueryDefinition', ['ObjectID', 'CustomerKey', 'Name', 'QueryText'], verbose=verbose)
         except Exception as e2:
             print('SOAP QueryDefinition retrieve failed:', e2)
             queries = []
@@ -346,7 +365,7 @@ def orchestrate(out_dir: str):
         if not ck:
             continue
         try:
-            fields = soap_retrieve(SFMC_SOAP_BASE_URL, access_token, 'DataExtensionField', ['Name', 'FieldType', 'IsPrimaryKey'])
+            fields = soap_retrieve(SFMC_SOAP_BASE_URL, access_token, 'DataExtensionField', ['Name', 'FieldType', 'IsPrimaryKey'], verbose=verbose)
             # naive: return all fields and attach; in some SOAP responses you'll need to filter by DataExtension.CustomerKey
             de['fields'] = []
             for f in fields:
@@ -437,5 +456,10 @@ def orchestrate(out_dir: str):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SFMC scanner: export DE lineage graph')
     parser.add_argument('--out', '--out-dir', dest='out', default='./output', help='Output directory for graph.json and CSVs')
+    parser.add_argument('--verbose', dest='verbose', action='store_true', help='Write verbose SOAP/REST responses for debugging')
     args = parser.parse_args()
+    # pass verbose flag to orchestrate via global var set (quick pattern)
+    if args.verbose:
+        # set a module-level flag by monkeypatching local symbol (simple approach)
+        globals()['VERBOSE_FLAG'] = True
     orchestrate(args.out)
