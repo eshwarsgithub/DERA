@@ -1,0 +1,248 @@
+================================================================================
+                    🎯 SFMC SYNC - QUICK REFERENCE CARD
+================================================================================
+
+YOUR GOAL
+---------
+Connect DERA app to your Salesforce Marketing Cloud to pull REAL data
+
+CURRENT STATE: Sample data (2 fake DEs)
+TARGET STATE:  All your real SFMC Data Extensions with lineage
+
+================================================================================
+                          🚀 5-STEP QUICK START
+================================================================================
+
+STEP 1: SFMC - Create Installed Package
+----------------------------------------
+Location: SFMC → Setup → Apps → Installed Packages
+Action:   Click "New" → Name: "DERA Lineage Tool"
+          Add Component → API Integration → Server-to-Server
+
+Permissions to check:
+  ☑ Data Extensions: Read
+  ☑ Automation: Read
+  ☑ Journeys: Read
+  ☑ Assets: Read
+
+STEP 2: SFMC - Copy Credentials
+--------------------------------
+After saving, copy these values:
+  • Client ID
+  • Client Secret
+  • Authentication Base URI
+  • REST Base URI
+  • SOAP Base URI
+
+Also find:
+  • Your MID (Setup → My Organization)
+
+STEP 3: Local - Create .env.local
+----------------------------------
+In terminal:
+  cd /Users/eshwar/Desktop/DERA
+  cp .env.example .env.local
+
+Edit .env.local and paste your values from Step 2:
+  SFMC_CLIENT_ID=<your_client_id>
+  SFMC_CLIENT_SECRET=<your_secret>
+  SFMC_AUTH_BASE_URL=https://<subdomain>.auth.marketingcloudapis.com
+  SFMC_REST_BASE_URL=https://<subdomain>.rest.marketingcloudapis.com
+  SFMC_SOAP_BASE_URL=https://<subdomain>.soap.marketingcloudapis.com
+  SFMC_ACCOUNT_ID=<your_mid>
+
+STEP 4: Test Connection
+------------------------
+Run:
+  node tools/test-sfmc-connection.js
+
+Expected output:
+  ✅ All required variables are set!
+  ✅ Token acquired successfully!
+  ✅ REST API connection successful!
+  ✅ SOAP API connection successful!
+  ✅ Found 50+ Data Extensions
+
+STEP 5: Restart & View
+-----------------------
+Restart dev server:
+  npm run dev
+
+Open browser:
+  http://localhost:3000/des
+
+You should now see YOUR real SFMC Data Extensions!
+
+================================================================================
+                        📚 DOCUMENTATION INDEX
+================================================================================
+
+For quick setup:
+  → SFMC_SYNC_QUICKSTART.md          (Start here!)
+
+To track progress:
+  → SFMC_SETUP_CHECKLIST.md          (Check off as you go)
+
+For detailed guide:
+  → docs/SFMC_SETUP_GUIDE.md         (Step-by-step with screenshots)
+
+To understand how it works:
+  → docs/SFMC_ARCHITECTURE.md        (Technical deep dive)
+
+For complete overview:
+  → SFMC_SYNC_COMPLETE_GUIDE.md      (Everything explained)
+
+Updated README:
+  → README.md                         (General project info)
+
+Test script:
+  → tools/test-sfmc-connection.js    (Validate setup)
+
+Code (for reference):
+  → src/lib/sfmcClient.ts            (The actual sync logic)
+
+================================================================================
+                          🔧 TROUBLESHOOTING
+================================================================================
+
+ERROR: "SFMC env not configured"
+  → Create .env.local file with credentials
+
+ERROR: "Token error 401"
+  → Check Client ID and Client Secret are correct
+  → Verify no extra spaces when copying
+
+ERROR: "Token error 403"
+  → Check API permissions in installed package
+  → Ensure "Data Extensions: Read" is checked
+
+ERROR: Still seeing sample data
+  → Restart dev server: npm run dev
+  → Check .env.local exists in project root
+  → Verify no typos in environment variables
+
+ERROR: Connection refused
+  → Check subdomain URLs match your SFMC instance
+  → Verify firewall/network isn't blocking
+
+HELP: Can't find subdomain
+  → Look at SFMC URL when logged in
+  → Or check Installed Package page for full URLs
+
+HELP: Can't find MID
+  → SFMC → Setup → Settings → My Organization
+  → Look for "MID" or "Member ID"
+
+================================================================================
+                         ⚡ QUICK COMMANDS
+================================================================================
+
+Test SFMC connection:
+  node tools/test-sfmc-connection.js
+
+Start dev server:
+  npm run dev
+
+View Data Extensions:
+  Open: http://localhost:3000/des
+
+View Mind Map:
+  Open: http://localhost:3000/mindmap
+
+Check if .env.local exists:
+  ls -la .env.local
+
+View current environment (don't commit output!):
+  grep SFMC .env.local
+
+================================================================================
+                           🎯 SUCCESS METRICS
+================================================================================
+
+You're done when:
+  ✅ Test script passes all checks
+  ✅ Real SFMC DEs show in browser
+  ✅ DE count matches SFMC
+  ✅ Risk scores calculated from real fields
+  ✅ Mind map shows real automations/journeys
+
+================================================================================
+                        🔒 SECURITY REMINDERS
+================================================================================
+
+  ⚠️  NEVER commit .env.local to Git
+  ⚠️  Keep Client Secret secure (treat like a password)
+  ⚠️  .env.local is already in .gitignore - keep it that way!
+  ⚠️  Credentials never sent to browser (server-side only)
+  ⚠️  Only grant minimum required permissions
+
+================================================================================
+                           📊 WHAT GETS SYNCED
+================================================================================
+
+From SFMC                      To DERA App
+----------------------------------------------------------------------
+Data Extensions (metadata)  →  /des table (all DEs)
+Fields (name, type)         →  Field lists with PII detection
+Journeys                    →  Lineage map (downstream usage)
+Automations                 →  Lineage map (queries, activities)
+Query Activities            →  Lineage map (transformations)
+Imports                     →  Lineage map (upstream sources)
+CloudPages                  →  Lineage map (web page usage)
+
+NOT synced (privacy/performance):
+  ✗ Actual subscriber data
+  ✗ Email content
+  ✗ Row data from DEs
+  (Only METADATA is synced, not actual data values!)
+
+================================================================================
+                           ⏱️ TIME ESTIMATE
+================================================================================
+
+  SFMC setup:           5-10 minutes
+  Copy credentials:     5 minutes
+  Create .env.local:    2 minutes
+  Test:                 1 minute
+  Restart server:       30 seconds
+  ─────────────────────────────────
+  TOTAL:                ~15-20 minutes
+
+================================================================================
+                         🎓 HOW IT WORKS (BRIEF)
+================================================================================
+
+  1. User visits /des page
+  2. Next.js API route calls fetchDataExtensions()
+  3. sfmcClient.ts checks for SFMC_CLIENT_ID
+  4. If found: Requests OAuth token from SFMC
+  5. Uses token to fetch Data Extensions via SOAP API
+  6. Scans each field for PII (Email, Phone, DOB, etc.)
+  7. Calculates risk score based on PII + usage
+  8. Returns enriched data to frontend
+  9. UI displays table with risk scores and actions
+
+  If SFMC not configured → Returns sample data instead!
+
+================================================================================
+                          📞 NEED MORE HELP?
+================================================================================
+
+  Read:   SFMC_SYNC_QUICKSTART.md
+  Run:    node tools/test-sfmc-connection.js
+  Check:  Error messages (they're usually clear!)
+  Review: Troubleshooting section in any guide
+
+================================================================================
+                              🚀 START HERE
+================================================================================
+
+  Open and follow: SFMC_SYNC_QUICKSTART.md
+
+  OR if you prefer a checklist: SFMC_SETUP_CHECKLIST.md
+
+================================================================================
+
+                    Good luck! You've got this! 💪
+
+================================================================================

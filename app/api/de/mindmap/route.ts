@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchDataExtensions, fetchAutomations, fetchJourneys, fetchQueries, fetchCloudPages, fetchExports, fetchAssetContentById } from '@/src/lib/sfmcClient';
+import { fetchDataExtensions, fetchAutomations, fetchJourneys, fetchQueries, fetchCloudPages, fetchExports, fetchImports, fetchAssetContentById } from '@/src/lib/sfmcClient';
 import { parseSqlRelationships, normalizeTable } from '@/src/lib/usage/sql';
 import { saveTransformations, saveUsageEntries, upsertRegistry } from '@/src/lib/registry';
 import { scanField } from '@/src/lib/piiScanner';
@@ -22,13 +22,13 @@ export async function GET(req: Request) {
     const risk_score = computeRisk(pii, false);
     const risk_level = risk_score >= 70 ? 'High' : risk_score >= 40 ? 'Medium' : 'Low';
 
-    // Basic usage mapping heuristic: look for deKey in query texts or names
-    const [autos, journeys, queries, pages, exportsList] = await Promise.all([
+    const [autos, journeys, queries, pages, exportsList, importsList] = await Promise.all([
       fetchAutomations(),
       fetchJourneys(),
       fetchQueries(),
       fetchCloudPages(),
       fetchExports(),
+      fetchImports(),
     ]);
 
     const inbounds: any[] = [];
@@ -41,6 +41,17 @@ export async function GET(req: Request) {
       (de.externalKey || '').toLowerCase(),
       (de.name || '').toLowerCase(),
     ].filter(Boolean));
+
+    // Imports: check destinationObject
+    (importsList as any[]).forEach((imp) => {
+      const destId = (imp.destinationObject?.id || '').toLowerCase();
+      const destKey = (imp.destinationObject?.customerKey || '').toLowerCase();
+      const destName = (imp.destinationObject?.name || '').toLowerCase();
+
+      if (deNames.has(destId) || deNames.has(destKey) || deNames.has(destName)) {
+        inbounds.push({ type: 'Import', name: imp.name, confidence: 'high' });
+      }
+    });
 
     // Queries: parse SQL; if selected DE is target -> inbound from sources; if selected DE is a source -> outbound to targets
     for (const q of queries as any[]) {

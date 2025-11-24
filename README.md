@@ -8,6 +8,32 @@ Next.js + TypeScript dashboard that maps Salesforce Marketing Cloud Data Extensi
 - Optional OAuth 2.0 (NextAuth) — disabled in dev by `AUTH_DISABLED=true`
 - Vitest for unit tests
 
+## 🔄 SFMC Sync Setup
+
+**Want to connect your real Salesforce Marketing Cloud data?**
+
+This project can sync with your SFMC account to pull real Data Extensions, Journeys, Automations, and more!
+
+### Quick Start (5 Steps)
+
+1. **Create an Installed Package** in SFMC (Setup → Apps → Installed Packages)
+2. **Get your credentials** (Client ID, Client Secret, API URLs)
+3. **Create `.env.local`** file with your SFMC credentials
+4. **Test connection**: `node tools/test-sfmc-connection.js`
+5. **Restart dev server** and see your real data!
+
+### 📚 Documentation
+
+- **🚀 Quick Start**: [`SFMC_SYNC_QUICKSTART.md`](./SFMC_SYNC_QUICKSTART.md) - Follow this first!
+- **✅ Checklist**: [`SFMC_SETUP_CHECKLIST.md`](./SFMC_SETUP_CHECKLIST.md) - Track your progress
+- **🏗️ Architecture**: [`docs/SFMC_ARCHITECTURE.md`](./docs/SFMC_ARCHITECTURE.md) - How it works
+- **📖 Detailed Guide**: [`docs/SFMC_SETUP_GUIDE.md`](./docs/SFMC_SETUP_GUIDE.md) - Full instructions
+
+### Without SFMC
+The app works out-of-the-box with sample data if SFMC is not configured. Just skip the SFMC setup and proceed with the regular setup below!
+
+---
+
 ## Setup (macOS, zsh)
 
 1) Install dependencies

@@ -1,5 +1,11 @@
 import React from 'react';
 import { getBaseUrl } from '@/src/lib/absoluteUrl';
+import { Card } from '@/src/components/ui/Card';
+import { Input } from '@/src/components/ui/Input';
+import { Select } from '@/src/components/ui/Select';
+import { Button } from '@/src/components/ui/Button';
+import { Badge } from '@/src/components/ui/Badge';
+import Link from 'next/link';
 
 async function getDes(params: URLSearchParams) {
   const qs = params.toString();
@@ -21,55 +27,103 @@ export default async function Page({ searchParams }: { searchParams: Record<stri
       const qs = new URLSearchParams({ q, sortBy, sortDir });
       const res = await fetch(`${base}/api/de/inventory?${qs.toString()}`, { cache: 'no-store' });
       if (res.ok) return await res.json();
-    } catch {}
+    } catch { }
     return await getDes(params); // fallback to legacy endpoint if needed
   })();
   const items = data.items ?? [];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold">Data Extensions</h2>
-        <form className="flex items-center gap-2" method="get">
-          <input name="q" defaultValue={q} placeholder="Search..." className="px-2 py-1 rounded bg-white/10 border border-white/20 text-sm" />
-          <select name="sortBy" defaultValue={sortBy} className="px-2 py-1 rounded bg-white/10 border border-white/20 text-sm">
-            <option value="de_name">Name</option>
-            <option value="risk_score">Risk</option>
-          </select>
-          <select name="sortDir" defaultValue={sortDir} className="px-2 py-1 rounded bg-white/10 border border-white/20 text-sm">
-            <option value="asc">Asc</option>
-            <option value="desc">Desc</option>
-          </select>
-          <button className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-sm">Apply</button>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-white">Data Extensions</h2>
+          <p className="text-slate-400 mt-1">Manage and analyze your data extensions.</p>
+        </div>
+        <form className="flex flex-col md:flex-row items-end gap-3 bg-slate-900/50 p-4 rounded-xl border border-white/5" method="get">
+          <div className="w-full md:w-64">
+            <Input name="q" defaultValue={q} placeholder="Search by name..." />
+          </div>
+          <div className="w-full md:w-32">
+            <Select
+              name="sortBy"
+              defaultValue={sortBy}
+              options={[
+                { label: 'Name', value: 'de_name' },
+                { label: 'Risk', value: 'risk_score' }
+              ]}
+            />
+          </div>
+          <div className="w-full md:w-24">
+            <Select
+              name="sortDir"
+              defaultValue={sortDir}
+              options={[
+                { label: 'Asc', value: 'asc' },
+                { label: 'Desc', value: 'desc' }
+              ]}
+            />
+          </div>
+          <Button type="submit" variant="primary">Apply</Button>
         </form>
       </div>
-      <div className="rounded border border-white/10 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-white/5">
-            <tr>
-              <th className="text-left p-2">Name</th>
-              <th className="text-left p-2">Risk</th>
-              <th className="text-left p-2">Orphan</th>
-              <th className="text-left p-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it: any) => (
-              <tr key={it.id ?? it.de_key ?? it.name ?? it.de_name} className="border-t border-white/10 hover:bg-white/5">
-                <td className="p-2"><a className="hover:underline" href={`/des/${it.id ?? it.de_key}`}>{it.name ?? it.de_name}</a></td>
-                <td className="p-2">{it.riskScore ?? it.risk_score}</td>
-                <td className="p-2">{(it.isOrphan ?? false) ? 'Yes' : 'No'}</td>
-                <td className="p-2 text-sm"><a className="text-blue-400 hover:underline" href={`/mindmap?deKey=${encodeURIComponent(it.id ?? it.de_key ?? it.name ?? it.de_name)}`}>Analyze</a></td>
-              </tr>
-            ))}
-            {items.length === 0 && (
+
+      <Card className="overflow-hidden !p-0 border-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-900/80 text-slate-400 uppercase text-xs font-semibold">
               <tr>
-                <td className="p-3 text-white/60" colSpan={4}>No Data Extensions found</td>
+                <th className="px-6 py-4">Name</th>
+                <th className="px-6 py-4">Risk Score</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 text-right">Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {items.map((it: any) => (
+                <tr key={it.id ?? it.de_key ?? it.name ?? it.de_name} className="hover:bg-slate-800/50 transition-colors">
+                  <td className="px-6 py-4 font-medium text-white">
+                    <Link className="hover:text-blue-400 transition-colors" href={`/des/${it.id ?? it.de_key}`}>
+                      {it.name ?? it.de_name}
+                    </Link>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${(it.riskScore ?? it.risk_score) > 70 ? 'bg-red-500' :
+                              (it.riskScore ?? it.risk_score) > 30 ? 'bg-yellow-500' : 'bg-green-500'
+                            }`}
+                          style={{ width: `${it.riskScore ?? it.risk_score}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-slate-400">{it.riskScore ?? it.risk_score}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {(it.isOrphan ?? false) ? (
+                      <Badge variant="warning">Orphan</Badge>
+                    ) : (
+                      <Badge variant="success">Active</Badge>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <Link href={`/mindmap?deKey=${encodeURIComponent(it.id ?? it.de_key ?? it.name ?? it.de_name)}`}>
+                      <Button variant="ghost" size="sm">Analyze</Button>
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr>
+                  <td className="px-6 py-12 text-center text-slate-500" colSpan={4}>
+                    No Data Extensions found matching your criteria.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }

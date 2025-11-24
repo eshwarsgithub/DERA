@@ -1,0 +1,7 @@
+id,label,type,metadata
+DE_Subscribers,MasterSubscribers,DataExtension,"{""fields"": [{""Name"": ""EmailAddress"", ""FieldType"": ""EmailAddress""}, {""Name"": ""SubscriberKey"", ""FieldType"": ""Text""}, {""Name"": ""JoinDate"", ""FieldType"": ""Date""}]}"
+DE_Orders,Orders_Daily,DataExtension,"{""fields"": [{""Name"": ""OrderID"", ""FieldType"": ""Text""}, {""Name"": ""Email"", ""FieldType"": ""EmailAddress""}, {""Name"": ""Amount"", ""FieldType"": ""Decimal""}]}"
+DE_Staging,Staging_Import,DataExtension,"{""fields"": [{""Name"": ""RawData"", ""FieldType"": ""Text""}]}"
+Q_JoinOrders,Join Orders to Subscribers,Query,{}
+Q_Staging,Process Staging,Query,{}
+Auto_Daily_Etl,Daily ETL,Automation,{}

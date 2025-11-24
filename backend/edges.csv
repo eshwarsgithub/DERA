@@ -1,0 +1,8 @@
+source,target,label,confidence
+DE_Subscribers,Q_JoinOrders,READS_FROM,0.8
+DE_Orders,Q_JoinOrders,READS_FROM,0.8
+Q_JoinOrders,DE_Subscribers,WRITES_TO,1.0
+DE_Staging,Q_Staging,READS_FROM,0.8
+Q_Staging,DE_Orders,WRITES_TO,1.0
+Auto_Daily_Etl,Q_Staging,EXECUTES,1.0
+Auto_Daily_Etl,Q_JoinOrders,EXECUTES,1.0

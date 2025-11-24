@@ -1,0 +1,156 @@
+{
+  "elements": {
+    "nodes": [
+      {
+        "data": {
+          "id": "DE_Subscribers",
+          "label": "MasterSubscribers",
+          "type": "DataExtension",
+          "metadata": {
+            "fields": [
+              {
+                "Name": "EmailAddress",
+                "FieldType": "EmailAddress"
+              },
+              {
+                "Name": "SubscriberKey",
+                "FieldType": "Text"
+              },
+              {
+                "Name": "JoinDate",
+                "FieldType": "Date"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "data": {
+          "id": "DE_Orders",
+          "label": "Orders_Daily",
+          "type": "DataExtension",
+          "metadata": {
+            "fields": [
+              {
+                "Name": "OrderID",
+                "FieldType": "Text"
+              },
+              {
+                "Name": "Email",
+                "FieldType": "EmailAddress"
+              },
+              {
+                "Name": "Amount",
+                "FieldType": "Decimal"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "data": {
+          "id": "DE_Staging",
+          "label": "Staging_Import",
+          "type": "DataExtension",
+          "metadata": {
+            "fields": [
+              {
+                "Name": "RawData",
+                "FieldType": "Text"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "data": {
+          "id": "Q_JoinOrders",
+          "label": "Join Orders to Subscribers",
+          "type": "Query",
+          "metadata": {}
+        }
+      },
+      {
+        "data": {
+          "id": "Q_Staging",
+          "label": "Process Staging",
+          "type": "Query",
+          "metadata": {}
+        }
+      },
+      {
+        "data": {
+          "id": "Auto_Daily_Etl",
+          "label": "Daily ETL",
+          "type": "Automation",
+          "metadata": {}
+        }
+      }
+    ],
+    "edges": [
+      {
+        "data": {
+          "id": "DE_Subscribers_READS_FROM_Q_JoinOrders",
+          "source": "DE_Subscribers",
+          "target": "Q_JoinOrders",
+          "label": "READS_FROM",
+          "confidence": 0.8
+        }
+      },
+      {
+        "data": {
+          "id": "DE_Orders_READS_FROM_Q_JoinOrders",
+          "source": "DE_Orders",
+          "target": "Q_JoinOrders",
+          "label": "READS_FROM",
+          "confidence": 0.8
+        }
+      },
+      {
+        "data": {
+          "id": "Q_JoinOrders_WRITES_TO_DE_Subscribers",
+          "source": "Q_JoinOrders",
+          "target": "DE_Subscribers",
+          "label": "WRITES_TO",
+          "confidence": 1.0
+        }
+      },
+      {
+        "data": {
+          "id": "DE_Staging_READS_FROM_Q_Staging",
+          "source": "DE_Staging",
+          "target": "Q_Staging",
+          "label": "READS_FROM",
+          "confidence": 0.8
+        }
+      },
+      {
+        "data": {
+          "id": "Q_Staging_WRITES_TO_DE_Orders",
+          "source": "Q_Staging",
+          "target": "DE_Orders",
+          "label": "WRITES_TO",
+          "confidence": 1.0
+        }
+      },
+      {
+        "data": {
+          "id": "Auto_Daily_Etl_EXECUTES_Q_Staging",
+          "source": "Auto_Daily_Etl",
+          "target": "Q_Staging",
+          "label": "EXECUTES",
+          "confidence": 1.0
+        }
+      },
+      {
+        "data": {
+          "id": "Auto_Daily_Etl_EXECUTES_Q_JoinOrders",
+          "source": "Auto_Daily_Etl",
+          "target": "Q_JoinOrders",
+          "label": "EXECUTES",
+          "confidence": 1.0
+        }
+      }
+    ]
+  }
+}
